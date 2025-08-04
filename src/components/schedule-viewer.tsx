@@ -6,10 +6,12 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Download, FileText, AlertCircle } from "lucide-react"
 import type { Schedule } from "@/app/page"
-import type { Sucursal } from "./sucursal-schedule-display" // Importar el nuevo componente y agregar sucursales como prop
-import { SucursalScheduleDisplay } from "./sucursal-schedule-display"
+import { SucursalScheduleDisplay } from "@/components/sucursal-schedule-display"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import { useState } from "react"
+import type { Sucursal } from "@/types/sucursal" // Import Sucursal type
 
-// Actualizar la interfaz para recibir sucursales
 interface ScheduleViewerProps {
   schedules: Schedule[]
   sucursales: Sucursal[]
@@ -18,116 +20,239 @@ interface ScheduleViewerProps {
 const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
 
 export function ScheduleViewer({ schedules, sucursales }: ScheduleViewerProps) {
+  const [startDate, setStartDate] = useState<string>(new Date().toISOString().split("T")[0])
+
+  // Verificación de seguridad para props
+  if (!sucursales) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>Error: No se pudieron cargar los datos de las sucursales.</AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
+    )
+  }
+
   // Función para obtener datos de sucursal
   const getSucursalData = (id: string) => {
+    if (!sucursales || !Array.isArray(sucursales)) {
+      return undefined
+    }
     return sucursales.find((s) => s.id === id)
   }
   // Actualizar la función generatePDF para usar horarios específicos de cada sucursal
   const generatePDF = () => {
-    // Crear un mapa de sucursales para acceso rápido
-    const sucursalMap = schedules.reduce(
-      (acc, schedule) => {
-        if (!acc[schedule.sucursal]) {
-          // Buscar la sucursal en el array de sucursales (necesitamos pasarlo como prop)
-          acc[schedule.sucursal] = schedule.sucursal
-        }
-        return acc
-      },
-      {} as Record<string, string>,
-    )
+    if (!sucursales || sucursales.length === 0) {
+      alert("No hay sucursales disponibles para generar el PDF")
+      return
+    }
+    // Calcular las fechas de la semana basadas en la fecha de inicio
+    const getWeekDates = (startDateStr: string) => {
+      const startDate = new Date(startDateStr)
+      const dates = []
+
+      // Encontrar el lunes de esa semana
+      const dayOfWeek = startDate.getDay()
+      const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+      const monday = new Date(startDate)
+      monday.setDate(startDate.getDate() + mondayOffset)
+
+      // Generar las 6 fechas (Lunes a Sábado)
+      for (let i = 0; i < 6; i++) {
+        const date = new Date(monday)
+        date.setDate(monday.getDate() + i)
+        dates.push({
+          date: date.toLocaleDateString("es-ES", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+          }),
+          dayName: DAYS[i],
+        })
+      }
+
+      return dates
+    }
+
+    const weekDates = getWeekDates(startDate)
+
+    // Actualizar la función formatScheduleTime para incluir horarios flexibles
+    const formatScheduleTime = (daySchedule: { morning: boolean; afternoon: boolean; hours: number } | undefined, sucursal: Sucursal, employeeId?: string) => {
+      if (!daySchedule) return "Descanso"
+
+      const parts = []
+
+      if (daySchedule.morning) {
+        const morningStart = sucursal.morningStart
+        const morningEnd = sucursal.morningEnd
+        parts.push(`${morningStart.replace(":", "")} a ${morningEnd.replace(":", "")}`)
+      }
+
+      if (daySchedule.afternoon) {
+        const afternoonStart = sucursal.afternoonStart
+        const afternoonEnd = sucursal.afternoonEnd
+        parts.push(`${afternoonStart.replace(":", "")} a ${afternoonEnd.replace(":", "")}`)
+      }
+
+      return parts.length > 0 ? parts.join(" y ") : "Descanso"
+    }
 
     const htmlContent = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <title>Horarios Semanales</title>
-      <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        .header { text-align: center; margin-bottom: 30px; }
-        .sucursal { margin-bottom: 30px; page-break-inside: avoid; }
-        .sucursal-title { background-color: #f5f5f5; padding: 10px; font-weight: bold; font-size: 18px; }
-        .employee { margin-bottom: 20px; border: 1px solid #ddd; }
-        .employee-header { background-color: #f9f9f9; padding: 10px; font-weight: bold; }
-        .schedule-table { width: 100%; border-collapse: collapse; }
-        .schedule-table th, .schedule-table td { border: 1px solid #ddd; padding: 8px; text-align: center; }
-        .schedule-table th { background-color: #f5f5f5; }
-        .working { background-color: #e8f5e8; }
-        .not-working { background-color: #f5f5f5; color: #999; }
-        .summary { margin-top: 10px; font-size: 12px; color: #666; }
-      </style>
-    </head>
-    <body>
-      <div class="header">
-        <h1>Horarios Semanales</h1>
-        <p>Generado el ${new Date().toLocaleDateString("es-ES")}</p>
-      </div>
-      
-      ${schedules.reduce((acc, schedule, index, arr) => {
-        const isNewSucursal = index === 0 || schedule.sucursal !== arr[index - 1].sucursal
-        const totalHours = Object.values(schedule.schedule).reduce((sum, day) => sum + day.hours, 0)
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Horarios Semanales</title>
+        <style>
+          body { 
+            font-family: Arial, sans-serif; 
+            margin: 10px; 
+            font-size: 12px;
+          }
+          .header { 
+            text-align: center; 
+            margin-bottom: 20px; 
+          }
+          .schedule-table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-bottom: 30px;
+          }
+          .schedule-table th, .schedule-table td { 
+            border: 2px solid #000; 
+            padding: 8px; 
+            text-align: center; 
+            vertical-align: middle;
+            font-weight: bold;
+          }
+          .date-header { 
+            background-color: #4CAF50; 
+            color: white; 
+            font-weight: bold;
+            font-size: 11px;
+          }
+          .employee-name { 
+            background-color: #4CAF50; 
+            color: white; 
+            font-weight: bold;
+            text-align: center;
+            width: 100px;
+          }
+          .schedule-cell { 
+            background-color: white; 
+            min-height: 40px;
+            font-size: 10px;
+            font-weight: bold;
+          }
+          .rest-day { 
+            background-color: #FFEB3B; 
+            color: #000;
+            font-weight: bold;
+          }
+          .sucursal-title {
+            background-color: #2196F3;
+            color: white;
+            padding: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            text-align: center;
+            margin: 20px 0 10px 0;
+          }
+          .summary {
+            text-align: center;
+            margin-top: 10px;
+            font-size: 10px;
+            color: #666;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>HORARIOS SEMANALES</h1>
+          <p>Semana del ${weekDates[0].date} al ${weekDates[5].date}</p>
+          <p><strong>Todos los empleados trabajan 32 horas exactas - Sin días de descanso</strong></p>
+        </div>
+        
+        ${Object.entries(
+          schedules.reduce(
+            (acc, schedule) => {
+              if (!acc[schedule.sucursal]) {
+                acc[schedule.sucursal] = []
+              }
+              acc[schedule.sucursal].push(schedule)
+              return acc
+            },
+            {} as Record<string, typeof schedules>,
+          ),
+        )
+          .map(([sucursalId, sucursalSchedules]) => {
+            const sucursalData = sucursales.find((s) => s.id === sucursalId)
 
-        let html = ""
-
-        if (isNewSucursal) {
-          html += `<div class="sucursal-title">Sucursal: ${schedule.sucursal}</div>`
-        }
-
-        html += `
-          <div class="employee">
-            <div class="employee-header">
-              ${schedule.employeeName} - ${schedule.weeklyHours} horas semanales
-            </div>
+            return `
+            <div class="sucursal-title">${sucursalData?.name || sucursalId}</div>
             <table class="schedule-table">
-              <tr>
-                <th>Día</th>
-                <th>Turno Mañana</th>
-                <th>Turno Tarde</th>
-                <th>Horas del Día</th>
-              </tr>
-              ${DAYS.map((day) => {
-                const daySchedule = schedule.schedule[day]
-                if (!daySchedule) {
-                  return `
+              <thead>
+                <tr>
+                  <th class="employee-name">EMPLEADO</th>
+                  ${weekDates
+                    .map(
+                      (dateInfo) => `
+                    <th class="date-header">${dateInfo.date}<br>${dateInfo.dayName.toUpperCase()}</th>
+                  `,
+                    )
+                    .join("")}
+                </tr>
+              </thead>
+              <tbody>
+                ${sucursalSchedules
+                  .map((schedule) => {
+                    const totalHours = Object.values(schedule.schedule).reduce((sum, day) => sum + day.hours, 0)
+
+                    return `
                     <tr>
-                      <td><strong>${day}</strong></td>
-                      <td class="not-working">No trabaja</td>
-                      <td class="not-working">No trabaja</td>
-                      <td class="not-working">0h</td>
+                      <td class="employee-name">${schedule.employeeName.toUpperCase()}</td>
+                      ${weekDates
+                        .map((dateInfo) => {
+                          const daySchedule = schedule.schedule[dateInfo.dayName]
+                          const scheduleText = sucursalData ? formatScheduleTime(daySchedule, sucursalData, schedule.employeeId) : "Descanso"
+
+                          return `
+                          <td class="schedule-cell">
+                            ${scheduleText}
+                          </td>
+                        `
+                        })
+                        .join("")}
+                    </tr>
+                    <tr>
+                      <td colspan="7" class="summary">
+                        ${schedule.employeeName}: Total ${totalHours.toFixed(1)} horas semanales
+                      </td>
                     </tr>
                   `
-                }
-                return `
-                  <tr>
-                    <td><strong>${day}</strong></td>
-                    <td class="${daySchedule.morning ? "working" : "not-working"}">
-                      ${daySchedule.morning ? "Trabaja" : "No trabaja"}
-                    </td>
-                    <td class="${daySchedule.afternoon ? "working" : "not-working"}">
-                      ${daySchedule.afternoon ? "Trabaja" : "No trabaja"}
-                    </td>
-                    <td class="working">${daySchedule.hours}h</td>
-                  </tr>
-                `
-              }).join("")}
+                  })
+                  .join("")}
+              </tbody>
             </table>
-            <div class="summary">
-              Total horas asignadas: ${totalHours.toFixed(1)}h de ${schedule.weeklyHours}h
-            </div>
-          </div>
-        `
-
-        return acc + html
-      }, "")}
-    </body>
-    </html>
-  `
+          `
+          })
+          .join("")}
+        
+        <div style="margin-top: 30px; text-align: center; font-size: 10px; color: #666;">
+          Generado el ${new Date().toLocaleDateString("es-ES")} - Sistema de Horarios Equitativos
+        </div>
+      </body>
+      </html>
+    `
 
     const blob = new Blob([htmlContent], { type: "text/html" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `horarios-semanales-${new Date().toISOString().split("T")[0]}.html`
+    a.download = `horarios-semana-${weekDates[0].date.replace(/\//g, "-")}.html`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -167,9 +292,11 @@ export function ScheduleViewer({ schedules, sucursales }: ScheduleViewerProps) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            Horarios Generados
+            Horarios Generados - Sin Descansos
           </CardTitle>
-          <CardDescription>Visualiza y descarga los horarios semanales de todos los empleados</CardDescription>
+          <CardDescription>
+            Todos los empleados trabajan de lunes a sábado con exactamente 32 horas semanales
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex justify-between items-center mb-6">
@@ -179,14 +306,36 @@ export function ScheduleViewer({ schedules, sucursales }: ScheduleViewerProps) {
                 <p className="text-sm text-muted-foreground">Empleados</p>
               </div>
               <div className="text-center">
+                <p className="text-2xl font-bold">32</p>
+                <p className="text-sm text-muted-foreground">Horas Exactas</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold">6</p>
+                <p className="text-sm text-muted-foreground">Días Trabajando</p>
+              </div>
+              <div className="text-center">
                 <p className="text-2xl font-bold">{Object.keys(schedulesBySucursal).length}</p>
                 <p className="text-sm text-muted-foreground">Sucursales</p>
               </div>
             </div>
-            <Button onClick={generatePDF} size="lg">
-              <Download className="h-4 w-4 mr-2" />
-              Descargar PDF
-            </Button>
+            <div className="flex gap-4 items-center">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="start-date" className="text-sm">
+                  Fecha de inicio de semana:
+                </Label>
+                <Input
+                  id="start-date"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-40"
+                />
+              </div>
+              <Button onClick={generatePDF} size="lg">
+                <Download className="h-4 w-4 mr-2" />
+                Descargar PDF
+              </Button>
+            </div>
           </div>
 
           <div className="space-y-6">
@@ -197,6 +346,7 @@ export function ScheduleViewer({ schedules, sucursales }: ScheduleViewerProps) {
                 <div className="space-y-4">
                   {sucursalSchedules.map((schedule) => {
                     const totalAssignedHours = Object.values(schedule.schedule).reduce((sum, day) => sum + day.hours, 0)
+                    const workingDays = Object.keys(schedule.schedule).length
 
                     return (
                       <Card key={schedule.employeeId}>
@@ -204,10 +354,15 @@ export function ScheduleViewer({ schedules, sucursales }: ScheduleViewerProps) {
                           <div className="flex justify-between items-center">
                             <CardTitle className="text-lg">{schedule.employeeName}</CardTitle>
                             <div className="flex gap-2">
-                              <Badge variant="outline">{schedule.weeklyHours}h semanales</Badge>
-                              <Badge variant={totalAssignedHours === schedule.weeklyHours ? "default" : "secondary"}>
-                                {totalAssignedHours.toFixed(1)}h asignadas
+                              <Badge variant="outline">{workingDays}/6 días</Badge>
+                              <Badge variant={Math.abs(totalAssignedHours - 32) < 0.1 ? "default" : "destructive"}>
+                                {totalAssignedHours.toFixed(1)}h
                               </Badge>
+                              {Math.abs(totalAssignedHours - 32) < 0.1 && workingDays === 6 && (
+                                <Badge variant="default" className="bg-green-500">
+                                  ✓ Perfecto
+                                </Badge>
+                              )}
                             </div>
                           </div>
                         </CardHeader>

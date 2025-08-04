@@ -3,9 +3,9 @@
 import { useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { EmployeeManagement } from "../components/employee-management"
-import { ScheduleGenerator } from "../components/schedule-generator"
-import { ScheduleViewer } from "../components/schedule-viewer"
+import { EmployeeManagement } from "@/components/employee-management"
+import { ScheduleGenerator } from "@/components/schedule-generator"
+import { ScheduleViewer } from "@/components/schedule-viewer"
 import { Building2, Users, Calendar, FileText } from "lucide-react"
 
 export interface Employee {
@@ -13,6 +13,11 @@ export interface Employee {
   name: string
   sucursal: string
   weeklyHours: number
+  flexibleSchedule?: {
+    morningDelay?: number // minutos de retraso en la mañana
+    afternoonDelay?: number // minutos de retraso en la tarde
+    earlyLeave?: number // minutos de salida temprana
+  }
 }
 
 export interface Sucursal {
@@ -35,6 +40,11 @@ export interface Schedule {
       morning: boolean
       afternoon: boolean
       hours: number
+      flexibleSchedule?: {
+        morningDelay?: number // minutos de retraso en la mañana
+        afternoonDelay?: number // minutos de retraso en la tarde
+        earlyLeave?: number // minutos de salida temprana
+      }
     }
   }
 }

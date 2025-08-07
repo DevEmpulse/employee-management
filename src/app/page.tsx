@@ -7,47 +7,7 @@ import { EmployeeManagement } from "@/components/employee-management"
 import { ScheduleGenerator } from "@/components/schedule-generator"
 import { ScheduleViewer } from "@/components/schedule-viewer"
 import { Building2, Users, Calendar, FileText } from "lucide-react"
-
-export interface Employee {
-  id: string
-  name: string
-  sucursal: string
-  weeklyHours: number
-  flexibleSchedule?: {
-    morningDelay?: number // minutos de retraso en la mañana
-    afternoonDelay?: number // minutos de retraso en la tarde
-    earlyLeave?: number // minutos de salida temprana
-  }
-}
-
-export interface Sucursal {
-  id: string
-  name: string
-  address: string
-  morningStart: string
-  morningEnd: string
-  afternoonStart: string
-  afternoonEnd: string
-}
-
-export interface Schedule {
-  employeeId: string
-  employeeName: string
-  sucursal: string
-  weeklyHours: number
-  schedule: {
-    [key: string]: {
-      morning: boolean
-      afternoon: boolean
-      hours: number
-      flexibleSchedule?: {
-        morningDelay?: number // minutos de retraso en la mañana
-        afternoonDelay?: number // minutos de retraso en la tarde
-        earlyLeave?: number // minutos de salida temprana
-      }
-    }
-  }
-}
+import type { Employee, Sucursal, Schedule } from "@/types"
 
 export default function HomePage() {
   const [sucursales, setSucursales] = useState<Sucursal[]>([])

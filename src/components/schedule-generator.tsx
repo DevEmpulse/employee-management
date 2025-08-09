@@ -3,32 +3,9 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Calendar, Shuffle, AlertCircle, Users, Clock } from 'lucide-react'
-import type { Employee, Sucursal, Schedule } from "@/app/page"
-
-interface ScheduleGeneratorProps {
-  employees: Employee[]
-  sucursales: Sucursal[]
-  schedules: Schedule[]
-  setSchedules: (schedules: Schedule[]) => void
-}
-
-const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
-
-// Utilidades de tiempo
-const t2m = (t: string) => {
-  const [h, m] = t.split(":").map(Number)
-  return h * 60 + m
-}
-const m2t = (mins: number) => {
-  const h = Math.floor(mins / 60)
-  const m = mins % 60
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`
-}
-const addMin = (t: string, mins: number) => m2t(t2m(t) + mins)
-const hoursBetween = (start: string, end: string) => (t2m(end) - t2m(start)) / 60
+import { Calendar, Shuffle, AlertCircle, Clock } from "lucide-react"
+import type { Employee, Sucursal, Schedule, DaySchedule } from "@/types"
 
 type DayBlock = {
   morning: boolean
@@ -40,77 +17,75 @@ type DayBlock = {
   afternoonEnd?: string
 }
 
-export function ScheduleGenerator({ employees, sucursales, setSchedules }: ScheduleGeneratorProps) {
+interface MonthlyScheduleGeneratorProps {
+  employees: Employee[]
+  sucursales: Sucursal[]
+  setSchedules: (schedules: Schedule[]) => void
+  month?: string               // "YYYY-MM"; default: mes actual
+  forbidConsecutiveDoubles?: boolean
+  fixedCapacityPerShift?: number | null // si null => total-1
+}
+
+const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"] as const
+
+// ---------- utilidades de tiempo ----------
+const t2m = (t: string) => { const [h,m] = t.split(":").map(Number); return h*60+m }
+const m2t = (mins: number) => { const h = Math.floor(mins/60); const m = mins%60; return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}` }
+const addMin = (t: string, mins: number) => m2t(t2m(t)+mins)
+const hoursBetween = (a: string, b: string) => (t2m(b)-t2m(a))/60
+const iso = (d: Date) => d.toISOString().split("T")[0]
+
+// Semana ISO simple: "YYYY-Www" (lunes como inicio)
+function isoWeekId(d: Date): string {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+  const dayNum = (date.getUTCDay() + 6) % 7
+  date.setUTCDate(date.getUTCDate() - dayNum + 3)
+  const firstThu = new Date(Date.UTC(date.getUTCFullYear(),0,4))
+  const week = 1 + Math.round(((+date - +firstThu)/86400000 - 3)/7)
+  const year = date.getUTCFullYear()
+  return `${year}-W${String(week).padStart(2,"0")}`
+}
+
+function monthDates(year: number, monthIndex: number) {
+  const first = new Date(year, monthIndex, 1)
+  const last  = new Date(year, monthIndex+1, 0)
+  const out: { iso: string; date: Date; dow: number; weekId: string; dayName: string }[] = []
+  for (let d = new Date(first); d <= last; d.setDate(d.getDate()+1)) {
+    const dow = d.getDay() // 0 Dom .. 6 Sáb
+    if (dow >= 1 && dow <= 6) {
+      out.push({
+        iso: iso(d),
+        date: new Date(d),
+        dow,
+        weekId: isoWeekId(d),
+        dayName: DAYS[dow-1],
+      })
+    }
+  }
+  return out
+}
+
+// ---------- componente ----------
+export function ScheduleGenerator({
+  employees, sucursales, setSchedules, month,
+  forbidConsecutiveDoubles = true,
+  fixedCapacityPerShift = null,
+}: MonthlyScheduleGeneratorProps) {
+
   const [isGenerating, setIsGenerating] = useState(false)
 
+  // blocks
   const makeBlock = (opts: {
     kind: "M" | "MS" | "A" | "AL" | "MA" | "MAL"
-    sucursal: Sucursal
-    hM: number
-    hA: number
-    hAL: number
-    hMS: number
+    suc: Sucursal; hM: number; hA: number; hAL: number; hMS: number
   }): DayBlock => {
-    const { kind, sucursal, hM, hA, hAL, hMS } = opts
-    if (kind === "M") {
-      return {
-        morning: true,
-        afternoon: false,
-        morningStart: sucursal.morningStart,
-        morningEnd: sucursal.morningEnd,
-        hours: hM,
-      }
-    }
-    if (kind === "MS") {
-      // Mañana corta 9-13:00
-      return {
-        morning: true,
-        afternoon: false,
-        morningStart: sucursal.morningStart,
-        morningEnd: addMin(sucursal.morningEnd, -30),
-        hours: hMS,
-      }
-    }
-    if (kind === "A") {
-      return {
-        morning: false,
-        afternoon: true,
-        afternoonStart: sucursal.afternoonStart,
-        afternoonEnd: sucursal.afternoonEnd,
-        hours: hA,
-      }
-    }
-    if (kind === "AL") {
-      // Tarde atrasada 18-21
-      return {
-        morning: false,
-        afternoon: true,
-        afternoonStart: addMin(sucursal.afternoonStart, 60),
-        afternoonEnd: sucursal.afternoonEnd,
-        hours: hAL,
-      }
-    }
-    if (kind === "MA") {
-      return {
-        morning: true,
-        afternoon: true,
-        morningStart: sucursal.morningStart,
-        morningEnd: sucursal.morningEnd,
-        afternoonStart: sucursal.afternoonStart,
-        afternoonEnd: sucursal.afternoonEnd,
-        hours: hM + hA,
-      }
-    }
-    // MAL
-    return {
-      morning: true,
-      afternoon: true,
-      morningStart: sucursal.morningStart,
-      morningEnd: sucursal.morningEnd,
-      afternoonStart: addMin(sucursal.afternoonStart, 60),
-      afternoonEnd: sucursal.afternoonEnd,
-      hours: hM + hAL,
-    }
+    const { kind, suc, hM, hA, hAL, hMS } = opts
+    if (kind==="M")  return { morning:true, afternoon:false, morningStart:suc.morningStart, morningEnd:suc.morningEnd, hours:hM }
+    if (kind==="MS") return { morning:true, afternoon:false, morningStart:suc.morningStart, morningEnd:addMin(suc.morningEnd,-30), hours:hMS }
+    if (kind==="A")  return { morning:false, afternoon:true, afternoonStart:suc.afternoonStart, afternoonEnd:suc.afternoonEnd, hours:hA }
+    if (kind==="AL") return { morning:false, afternoon:true, afternoonStart:addMin(suc.afternoonStart,60), afternoonEnd:suc.afternoonEnd, hours:hAL }
+    if (kind==="MA") return { morning:true, afternoon:true, morningStart:suc.morningStart, morningEnd:suc.morningEnd, afternoonStart:suc.afternoonStart, afternoonEnd:suc.afternoonEnd, hours:hM+hA }
+    return { morning:true, afternoon:true, morningStart:suc.morningStart, morningEnd:suc.morningEnd, afternoonStart:addMin(suc.afternoonStart,60), afternoonEnd:suc.afternoonEnd, hours:hM+hAL }
   }
 
   const recalcBlock = (b: DayBlock) => {
@@ -120,321 +95,327 @@ export function ScheduleGenerator({ employees, sucursales, setSchedules }: Sched
     b.hours = Number(h.toFixed(2))
   }
 
-  const generateSchedules = () => {
+  // cobertura por día (contar turnos completos)
+  function countFullMorning(dayMap: Record<string, DayBlock>, suc: Sucursal) {
+    return Object.values(dayMap).filter(b => b.morning && (b.morningEnd ?? suc.morningEnd) === suc.morningEnd).length
+  }
+  function countFullAfternoon(dayMap: Record<string, DayBlock>, suc: Sucursal) {
+    return Object.values(dayMap).filter(b => b.afternoon && (b.afternoonStart ?? suc.afternoonStart) === suc.afternoonStart).length
+  }
+
+  const generate = () => {
     setIsGenerating(true)
     setTimeout(() => {
-      const newSchedules: Schedule[] = []
+      const out: Schedule[] = []
 
-      // Agrupar por sucursal
+      // agrupar por sucursal
       const bySucursal = employees.reduce((acc, e) => {
-        if (!acc[e.sucursal]) acc[e.sucursal] = []
-        acc[e.sucursal].push(e)
+        (acc[e.sucursal] ||= []).push(e)
         return acc
       }, {} as Record<string, Employee[]>)
 
-      Object.entries(bySucursal).forEach(([sucursalId, list]) => {
-        const sucursal = sucursales.find((s) => s.id === sucursalId)
-        if (!sucursal) return
+      Object.entries(bySucursal).forEach(([sucId, emps]) => {
+        const suc = sucursales.find(s => s.id === sucId)
+        if (!suc) return
 
-        // Duraciones (h)
-        const hM = hoursBetween(sucursal.morningStart, sucursal.morningEnd) // 4.5
-        const hMS = hoursBetween(sucursal.morningStart, addMin(sucursal.morningEnd, -30)) // 4.0
-        const hA = hoursBetween(sucursal.afternoonStart, sucursal.afternoonEnd) // 4.0
-        const hAL = hoursBetween(addMin(sucursal.afternoonStart, 60), sucursal.afternoonEnd) // 3.0
-        const targetWeekMin = 32 * 60
+        // mes
+        const [Y,M] = (month ?? new Date().toISOString().slice(0,7)).split("-").map(Number)
+        const dates = monthDates(Y, M-1) // L–S
+        const weekIds = Array.from(new Set(dates.map(d=>d.weekId)))
 
-        const totalEmployees = list.length
-        const perShiftCap = Math.min(totalEmployees, Math.max(1, totalEmployees - 1)) // nunca todos
+        // duraciones
+        const hM  = hoursBetween(suc.morningStart, suc.morningEnd)
+        const hMS = hoursBetween(suc.morningStart, addMin(suc.morningEnd,-30))
+        const hA  = hoursBetween(suc.afternoonStart, suc.afternoonEnd)
+        const hAL = hoursBetween(addMin(suc.afternoonStart,60), suc.afternoonEnd)
 
-        // Estado por empleado
-        const empMap: Record<
-          string,
-          Schedule & { schedule: Record<string, DayBlock>; _totalMin: number }
-        > = {}
-        list.forEach((e) => {
-          empMap[e.id] = {
-            employeeId: e.id,
-            employeeName: e.name,
-            sucursal: e.sucursal,
-            weeklyHours: 32,
-            schedule: {},
-            _totalMin: 0,
-          } as Schedule & { schedule: Record<string, DayBlock>; _totalMin: number }
-        })
+        // metas
+        const TARGET_WEEK_MIN = 32*60
+        const BAND_LOW  = 31.5*60
+        const BAND_HIGH = 32.5*60
+        const TARGET_MONTH_MIN = weekIds.length * TARGET_WEEK_MIN
 
-        const getTotalMin = (id: string) =>
-          Math.round(Object.values(empMap[id].schedule).reduce((s, d) => s + d.hours * 60, 0))
+        const perShiftCap = (n: number) =>
+          fixedCapacityPerShift ? Math.min(n, Math.max(1, fixedCapacityPerShift)) : Math.min(n, Math.max(1, n-1))
 
-        // Asignación base por día con cobertura y rotación
-        DAYS.forEach((day) => {
-          // Orden por menos minutos acumulados
-          const sorted = [...list].sort((a, b) => getTotalMin(a.id) - getTotalMin(b.id))
-
-          // Mañana: perShiftCap empleados
-          const morningIds = sorted.slice(0, perShiftCap).map((e) => e.id)
-
-          // Aplicar mañana
-          morningIds.forEach((id) => {
-            empMap[id].schedule[day] = makeBlock({ kind: "M", sucursal, hM, hA, hAL, hMS })
-          })
-
-          // Tarde: priorizar los que NO estuvieron en mañana
-          const notInMorning = sorted.filter((e) => !morningIds.includes(e.id))
-          const needA = perShiftCap
-          const chosenA: string[] = []
-
-          // 1) Agregar los que no trabajaron mañana hasta llenar cupo
-          for (const e of notInMorning) {
-            if (chosenA.length >= needA) break
-            chosenA.push(e.id)
-          }
-          // 2) Si falta, completar con quienes sí trabajaron mañana pero con menos minutos
-          if (chosenA.length < needA) {
-            const candidates = sorted.filter((e) => morningIds.includes(e.id) && !chosenA.includes(e.id))
-            for (const e of candidates) {
-              if (chosenA.length >= needA) break
-              chosenA.push(e.id)
-            }
-          }
-
-          // Aplicar tarde
-          chosenA.forEach((id) => {
-            const existing = empMap[id].schedule[day]
-            if (existing) {
-              // ya tiene mañana → doble turno
-              existing.afternoon = true
-              existing.afternoonStart = sucursal.afternoonStart
-              existing.afternoonEnd = sucursal.afternoonEnd
-              recalcBlock(existing)
-            } else {
-              empMap[id].schedule[day] = makeBlock({ kind: "A", sucursal, hM, hA, hAL, hMS })
-            }
-          })
-
-          // Garantía de apertura y cierre: ya cumplida porque siempre hay perShiftCap >= 1 en M y A
-          // Garantía 6 días: con la lógica anterior, todos tienen al menos un turno por día.
-        })
-
-        // Ajustes para llegar a 32h exactas por empleado sin romper cupos ni cobertura
-        const dayAfternoonSets: Record<string, Set<string>> = {}
-        const dayMorningSets: Record<string, Set<string>> = {}
-        DAYS.forEach((day) => {
-          const am = new Set<string>()
-          const pm = new Set<string>()
-          list.forEach((e) => {
-            const b = empMap[e.id].schedule[day]
-            if (b?.morning) am.add(e.id)
-            if (b?.afternoon) pm.add(e.id)
-          })
-          dayMorningSets[day] = am
-          dayAfternoonSets[day] = pm
-        })
-
-        // Funciones de ayuda de ajuste
-        const canAddAfternoonFor = (empId: string, day: string) => {
-          const b = empMap[empId].schedule[day]
-          // Debe tener mañana sin tarde para poder añadir y el turno tarde debe estar lleno (haremos swap)
-          return b?.morning && !b.afternoon && dayAfternoonSets[day].size === perShiftCap
+        // estado
+        type EmpState = {
+          id: string
+          name: string
+          totalMonthMin: number
+          weekMin: Record<string, number>
+          byDate: Record<string, DayBlock|undefined>
+          lastDoubleDay: string | null
         }
-        const swapAfternoonTo = (toEmpId: string, day: string): boolean => {
-          // Buscar alguien con doble turno ese día para quitarle la tarde y dársela a toEmpId
-          const pmIds = Array.from(dayAfternoonSets[day])
-          // Ordenar candidatos por mayor total de minutos (quien más tenga cede primero)
-          pmIds.sort((a, b) => getTotalMin(b) - getTotalMin(a))
-          for (const fromId of pmIds) {
-            const bFrom = empMap[fromId].schedule[day]
-            if (bFrom && bFrom.morning && bFrom.afternoon) {
-              // quitar tarde a fromId
-              bFrom.afternoon = false
-              bFrom.afternoonStart = undefined
-              bFrom.afternoonEnd = undefined
-              recalcBlock(bFrom)
-              dayAfternoonSets[day].delete(fromId)
+        const E: Record<string, EmpState> = {}
+        emps.forEach(e => E[e.id] = {
+          id: e.id, name: e.name,
+          totalMonthMin: 0,
+          weekMin: Object.fromEntries(weekIds.map(w=>[w,0])),
+          byDate: {},
+          lastDoubleDay: null
+        })
 
-              // dar tarde a toEmpId (A por defecto)
-              const bTo = empMap[toEmpId].schedule[day]
-              if (bTo) {
-                bTo.afternoon = true
-                bTo.afternoonStart = sucursal.afternoonStart
-                bTo.afternoonEnd = sucursal.afternoonEnd
-                recalcBlock(bTo)
-              } else {
-                empMap[toEmpId].schedule[day] = makeBlock({ kind: "A", sucursal, hM, hA, hAL, hMS })
-              }
-              dayAfternoonSets[day].add(toEmpId)
-              return true
-            }
+        const needWeek  = (id: string, w: string) => TARGET_WEEK_MIN - E[id].weekMin[w]
+        const needMonth = (id: string) => TARGET_MONTH_MIN  - E[id].totalMonthMin
+
+        // --- PRE-PASO: SÁBADOS OBLIGATORIOS (todos trabajan sábado con 1 turno) ---
+        const saturdays = dates.filter(d => d.dow === 6) // 6 = Sábado
+
+        const addMorning = (empId: string, dIso: string) => {
+          const ex = E[empId].byDate[dIso]
+          if (!ex) {
+            E[empId].byDate[dIso] = makeBlock({ kind: "M", suc, hM, hA, hAL, hMS })
+          } else if (!ex.morning) {
+            ex.morning = true; ex.morningStart = suc.morningStart; ex.morningEnd = suc.morningEnd; recalcBlock(ex)
           }
-          return false
+          E[empId].totalMonthMin += hM * 60
+          const w = dates.find(x => x.iso === dIso)!.weekId
+          E[empId].weekMin[w] += hM * 60
         }
 
-        // Ajustar cada empleado a 32h exactas (1920 min)
-        list.forEach((e) => {
-          // 1) Calcular total actual
-          let totalMin = getTotalMin(e.id)
+        const addAfternoon = (empId: string, dIso: string) => {
+          const ex = E[empId].byDate[dIso]
+          if (!ex) {
+            E[empId].byDate[dIso] = makeBlock({ kind: "A", suc, hM, hA, hAL, hMS })
+          } else if (!ex.afternoon) {
+            ex.afternoon = true; ex.afternoonStart = suc.afternoonStart; ex.afternoonEnd = suc.afternoonEnd; recalcBlock(ex)
+          }
+          E[empId].totalMonthMin += hA * 60
+          const w = dates.find(x => x.iso === dIso)!.weekId
+          E[empId].weekMin[w] += hA * 60
+        }
 
-          // 2) Si faltan minutos: intentar ganar por swaps de tardes (A) desde dobles turnos
-          while (totalMin < targetWeekMin) {
-            let progressed = false
+        saturdays.forEach(d => {
+          const shuffled = [...emps].sort(() => Math.random() - 0.5)
+          const capSat = Math.max(1, Math.ceil(emps.length / 2)) // sin "todos" a la vez
+          const morningIds   = shuffled.slice(0, capSat).map(e => e.id)
+          const afternoonIds = shuffled.slice(capSat, Math.min(emps.length, capSat * 2)).map(e => e.id)
+          morningIds.forEach(id => addMorning(id, d.iso))
+          afternoonIds.forEach(id => addAfternoon(id, d.iso))
+        })
 
-            // Añadir tarde completa por swap si es posible
-            for (const day of DAYS) {
-              if (totalMin >= targetWeekMin) break
-              if (canAddAfternoonFor(e.id, day)) {
-                const ok = swapAfternoonTo(e.id, day)
-                if (ok) {
-                  totalMin = getTotalMin(e.id)
-                  progressed = true
+        // -------- Asignación base (fecha/slot) --------
+        dates.forEach(d => {
+          if (d.dow === 6) return // sábado ya resuelto
+
+          const cap = perShiftCap(emps.length)
+          const dayCount: Record<string, number> = Object.fromEntries(emps.map(x=>[x.id,0]))
+
+          const assign = (kind: "M"|"A") => {
+            let placed = 0
+            while (placed < cap) {
+              const cands = emps.filter(e => {
+                const blk = E[e.id].byDate[d.iso]
+                const hasM = blk?.morning ?? false
+                const hasA = blk?.afternoon ?? false
+                if (kind==="M" && hasM) return false
+                if (kind==="A" && hasA) return false
+                if (dayCount[e.id] >= 2) return false
+                if (forbidConsecutiveDoubles && E[e.id].lastDoubleDay) {
+                  const prev = new Date(d.date); prev.setDate(prev.getDate()-1)
+                  if (iso(prev) === E[e.id].lastDoubleDay && dayCount[e.id]===1) return false
                 }
-              }
-            }
-            if (totalMin >= targetWeekMin) break
-
-            // No hubo swaps posibles; usar incrementos finos:
-            // Preferir AL->A (+60) si ya tiene alguna AL
-            const daysWithAL: string[] = []
-            DAYS.forEach((day) => {
-              const b: DayBlock | undefined = empMap[e.id].schedule[day]
-              if (b?.afternoon && b.afternoonStart === addMin(sucursal.afternoonStart, 60)) {
-                daysWithAL.push(day)
-              }
-            })
-            if (daysWithAL.length > 0 && targetWeekMin - totalMin >= 60 - 0.01) {
-              const d = daysWithAL[0]
-              const b = empMap[e.id].schedule[d]!
-              b.afternoonStart = sucursal.afternoonStart
-              recalcBlock(b)
-              totalMin = getTotalMin(e.id)
-              progressed = true
-            } else {
-              // MS->M (+30)
-              const daysWithMS: string[] = []
-              DAYS.forEach((day) => {
-                const b: DayBlock | undefined = empMap[e.id].schedule[day]
-                if (b?.morning && b.morningEnd === addMin(sucursal.morningEnd, -30) && (!b.afternoon || b.afternoon)) {
-                  daysWithMS.push(day)
-                }
+                return true
               })
-              if (daysWithMS.length > 0) {
-                const d = daysWithMS[0]
-                const b = empMap[e.id].schedule[d]!
-                b.morningEnd = sucursal.morningEnd
-                recalcBlock(b)
-                totalMin = getTotalMin(e.id)
-                progressed = true
+              if (!cands.length) break
+
+              // peso por déficit semanal + mensual + ruido
+              const chosen = cands
+                .map(e => ({ e, w: Math.max(0, needWeek(e.id, d.weekId)) + Math.max(0, needMonth(e.id)) + Math.random()*300 }))
+                .sort((a,b)=> b.w - a.w)[0].e
+
+              const existing = E[chosen.id].byDate[d.iso]
+              if (!existing) {
+                E[chosen.id].byDate[d.iso] = makeBlock({ kind: kind==="M" ? "M" : "A", suc, hM, hA, hAL, hMS })
+              } else {
+                if (kind==="M") { existing.morning = true; existing.morningStart=suc.morningStart; existing.morningEnd=suc.morningEnd }
+                else { existing.afternoon = true; existing.afternoonStart=suc.afternoonStart; existing.afternoonEnd=suc.afternoonEnd }
+                recalcBlock(existing)
               }
+
+              dayCount[chosen.id] += 1
+              const inc = (kind==="M" ? hM : hA) * 60
+              E[chosen.id].totalMonthMin += inc
+              E[chosen.id].weekMin[d.weekId] += inc
+              if (dayCount[chosen.id] >= 2) E[chosen.id].lastDoubleDay = d.iso
+
+              placed++
             }
+          }
 
-            if (!progressed) {
-              // Como último recurso, convertir un día con mañana en MAL (añadir tarde tardía) si hay cupo por swap
+          assign("M")
+          assign("A")
+        })
+
+        // -------- Afinado semanal a bandas --------
+        const blocksByDate = (isoDate: string) => {
+          const map: Record<string, DayBlock> = {}
+          Object.values(E).forEach(st => { const b = st.byDate[isoDate]; if (b) map[st.id] = b })
+          return map
+        }
+
+        weekIds.forEach(wid => {
+          const weekIsos = dates.filter(x => x.weekId===wid).map(x=>x.iso)
+
+          const sumWeek = (id: string) =>
+            weekIsos.reduce((s,isoDate)=>{
+              const b = E[id].byDate[isoDate]
+              return s + (b ? b.hours*60 : 0)
+            }, 0)
+
+          emps.forEach(emp => {
+            let cur = sumWeek(emp.id)
+            let guard = 400
+            while (guard-- > 0 && (cur < BAND_LOW - 0.01 || cur > BAND_HIGH + 0.01)) {
               let done = false
-              for (const day of DAYS) {
-                if (totalMin >= targetWeekMin) break
-                // Si tiene mañana y no tarde, intentar swap pero con AL (para subir +180)
-                const b = empMap[e.id].schedule[day]
-                if (b?.morning && !b.afternoon && dayAfternoonSets[day].size === perShiftCap) {
-                  // quitar tarde a alguien con doble turno y colocar AL a este empleado
-                  const pmIds = Array.from(dayAfternoonSets[day]).sort((a, b) => getTotalMin(b) - getTotalMin(a))
-                  const donor = pmIds.find((id) => {
-                    const db = empMap[id].schedule[day]
-                    return db?.morning && db.afternoon
-                  })
-                  if (donor) {
-                    // donar
-                    const db = empMap[donor].schedule[day]!
-                    db.afternoon = false
-                    db.afternoonStart = undefined
-                    db.afternoonEnd = undefined
-                    recalcBlock(db)
-                    dayAfternoonSets[day].delete(donor)
 
-                    // receptor con AL
-                    b.afternoon = true
-                    b.afternoonStart = addMin(sucursal.afternoonStart, 60)
-                    b.afternoonEnd = sucursal.afternoonEnd
-                    recalcBlock(b)
-                    dayAfternoonSets[day].add(e.id)
-                    totalMin = getTotalMin(e.id)
-                    done = true
-                    break
+              if (cur > BAND_HIGH + 0.01) {
+                // recortar: A->AL si no rompe apertura de tarde
+                for (const isoDate of weekIsos) {
+                  const b = E[emp.id].byDate[isoDate]; if (!b) continue
+                  const dayMap = blocksByDate(isoDate)
+                  if (b.afternoon && (b.afternoonStart ?? suc.afternoonStart) === suc.afternoonStart && countFullAfternoon(dayMap, suc) > 1) {
+                    b.afternoonStart = addMin(suc.afternoonStart, 60); recalcBlock(b)
+                    cur -= 60; E[emp.id].totalMonthMin -= 60; E[emp.id].weekMin[wid] -= 60
+                    done = true; break
+                  }
+                }
+                if (!done) {
+                  // M->MS si no rompe cierre de mañana
+                  for (const isoDate of weekIsos) {
+                    const b = E[emp.id].byDate[isoDate]; if (!b) continue
+                    const dayMap = blocksByDate(isoDate)
+                    if (b.morning && (b.morningEnd ?? suc.morningEnd) === suc.morningEnd && countFullMorning(dayMap, suc) > 1) {
+                      b.morningEnd = addMin(suc.morningEnd, -30); recalcBlock(b)
+                      cur -= 30; E[emp.id].totalMonthMin -= 30; E[emp.id].weekMin[wid] -= 30
+                      done = true; break
+                    }
+                  }
+                }
+              } else {
+                // expandir: AL->A, luego MS->M
+                for (const isoDate of weekIsos) {
+                  const b = E[emp.id].byDate[isoDate]; if (!b) continue
+                  if (b.afternoon && (b.afternoonStart ?? "") === addMin(suc.afternoonStart,60)) {
+                    b.afternoonStart = suc.afternoonStart; recalcBlock(b)
+                    cur += 60; E[emp.id].totalMonthMin += 60; E[emp.id].weekMin[wid] += 60
+                    done = true; break
+                  }
+                }
+                if (!done) {
+                  for (const isoDate of weekIsos) {
+                    const b = E[emp.id].byDate[isoDate]; if (!b) continue
+                    if (b.morning && (b.morningEnd ?? "") === addMin(suc.morningEnd,-30)) {
+                      b.morningEnd = suc.morningEnd; recalcBlock(b)
+                      cur += 30; E[emp.id].totalMonthMin += 30; E[emp.id].weekMin[wid] += 30
+                      done = true; break
+                    }
                   }
                 }
               }
               if (!done) break
             }
-          }
+          })
+        })
 
-          // 3) Si sobran minutos: reducir con A->AL (-60) y M->MS (-30)
-          totalMin = getTotalMin(e.id)
-          while (totalMin > targetWeekMin + 1) {
-            let reduced = false
-            // A -> AL
-            for (const day of DAYS) {
-              if (totalMin <= targetWeekMin + 1) break
-              const b = empMap[e.id].schedule[day]
-              if (b?.afternoon && b.afternoonStart === sucursal.afternoonStart) {
-                b.afternoonStart = addMin(sucursal.afternoonStart, 60)
-                recalcBlock(b)
-                totalMin = getTotalMin(e.id)
-                reduced = true
+        // -------- Balance mensual: total exacto = 32 * #semanas --------
+        emps.forEach(emp => {
+          let cur = E[emp.id].totalMonthMin
+          let guard = 600
+          while (guard-- > 0 && Math.abs(cur - TARGET_MONTH_MIN) > 0.01) {
+            let moved = false
+            if (cur > TARGET_MONTH_MIN + 0.01) {
+              const richWeeks = weekIds.filter(w => E[emp.id].weekMin[w] >= BAND_HIGH - 0.01)
+              for (const w of richWeeks) {
+                const weekIsos = dates.filter(x=>x.weekId===w).map(x=>x.iso)
+                for (const isoDate of weekIsos) {
+                  const b = E[emp.id].byDate[isoDate]; if (!b) continue
+                  const dayMap = blocksByDate(isoDate)
+                  if (b.afternoon && (b.afternoonStart ?? suc.afternoonStart) === suc.afternoonStart && countFullAfternoon(dayMap, suc) > 1) {
+                    b.afternoonStart = addMin(suc.afternoonStart,60); recalcBlock(b)
+                    cur -= 60; E[emp.id].totalMonthMin = cur; E[emp.id].weekMin[w] -= 60; moved = true; break
+                  }
+                }
+                if (moved) break
+                for (const isoDate of weekIsos) {
+                  const b = E[emp.id].byDate[isoDate]; if (!b) continue
+                  const dayMap = blocksByDate(isoDate)
+                  if (b.morning && (b.morningEnd ?? suc.morningEnd) === suc.morningEnd && countFullMorning(dayMap, suc) > 1) {
+                    b.morningEnd = addMin(suc.morningEnd,-30); recalcBlock(b)
+                    cur -= 30; E[emp.id].totalMonthMin = cur; E[emp.id].weekMin[w] -= 30; moved = true; break
+                  }
+                }
+                if (moved) break
               }
-            }
-            if (totalMin <= targetWeekMin + 1) break
-            if (reduced) continue
-
-            // M -> MS
-            for (const day of DAYS) {
-              if (totalMin <= targetWeekMin + 1) break
-              const b = empMap[e.id].schedule[day]
-              if (b?.morning && b.morningEnd === sucursal.morningEnd) {
-                b.morningEnd = addMin(sucursal.morningEnd, -30)
-                recalcBlock(b)
-                totalMin = getTotalMin(e.id)
-                reduced = true
+              if (!moved) break
+            } else {
+              const poorWeeks = weekIds.filter(w => E[emp.id].weekMin[w] <= BAND_LOW + 0.01)
+              for (const w of poorWeeks) {
+                const weekIsos = dates.filter(x=>x.weekId===w).map(x=>x.iso)
+                for (const isoDate of weekIsos) {
+                  const b = E[emp.id].byDate[isoDate]; if (!b) continue
+                  if (b.afternoon && (b.afternoonStart ?? "") === addMin(suc.afternoonStart,60)) {
+                    b.afternoonStart = suc.afternoonStart; recalcBlock(b)
+                    cur += 60; E[emp.id].totalMonthMin = cur; E[emp.id].weekMin[w] += 60; moved = true; break
+                  }
+                }
+                if (moved) break
+                for (const isoDate of weekIsos) {
+                  const b = E[emp.id].byDate[isoDate]; if (!b) continue
+                  if (b.morning && (b.morningEnd ?? "") === addMin(suc.morningEnd,-30)) {
+                    b.morningEnd = suc.morningEnd; recalcBlock(b)
+                    cur += 30; E[emp.id].totalMonthMin = cur; E[emp.id].weekMin[w] += 30; moved = true; break
+                  }
+                }
+                if (moved) break
               }
+              if (!moved) break
             }
-            if (!reduced) break
           }
         })
 
-        // Redondeo y push
-        Object.values(empMap).forEach((s) => {
-          // Ajuste final numérico
-          Object.values(s.schedule).forEach((d) => (d.hours = Number(d.hours.toFixed(2))))
-          newSchedules.push(s as unknown as Schedule)
+        // Emitir schedules
+        Object.values(E).forEach(st => {
+          const sched: Record<string, DaySchedule> = {}
+          Object.entries(st.byDate).forEach(([k,v]) => {
+            if (!v) return
+            sched[k] = {
+              morning: v.morning,
+              afternoon: v.afternoon,
+              morningStart: v.morningStart,
+              morningEnd: v.morningEnd,
+              afternoonStart: v.afternoonStart,
+              afternoonEnd: v.afternoonEnd,
+              hours: Number(v.hours.toFixed(2)),
+            }
+          })
+          out.push({
+            employeeId: st.id,
+            employeeName: st.name,
+            sucursal: suc.id,
+            weeklyHours: 32, // mantené si tu tipo lo necesita
+            schedule: sched,
+          } as Schedule)
         })
       })
 
-      setSchedules(newSchedules)
+      setSchedules(out)
       setIsGenerating(false)
-    }, 600)
+    }, 300)
   }
 
   if (employees.length === 0) {
     return (
       <Card>
         <CardContent className="pt-6">
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              No hay empleados registrados. Ve a la pestaña Empleados para agregar empleados antes de generar
-              horarios.
-            </AlertDescription>
-          </Alert>
+          <Alert><AlertCircle className="h-4 w-4" /><AlertDescription>No hay empleados registrados.</AlertDescription></Alert>
         </CardContent>
       </Card>
     )
   }
 
-  // Estadísticas por sucursal
-  const stats = sucursales.map((s) => {
-    const count = employees.filter((e) => e.sucursal === s.id).length
-    return {
-      ...s,
-      employeeCount: count,
-      perShiftCap: Math.min(count, Math.max(1, count - 1)),
-    }
-  })
+  // Nota: estadísticas por sucursal no usadas en esta versión del UI
 
   return (
     <div className="space-y-6">
@@ -442,11 +423,10 @@ export function ScheduleGenerator({ employees, sucursales, setSchedules }: Sched
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />
-            Generador de Horarios con Cobertura y Equidad
+            Generador Mensual (promedio 32 h/semana)
           </CardTitle>
           <CardDescription>
-            6 días por semana, 32h exactas, apertura 9:00-13:30 y cierre 17:00-21:00. Ajustes permitidos: 18:00-21:00 y
-            9:00-13:00.
+            Mes completo (L–S). Cada semana queda en 31.5–32.5 h; el total mensual por empleado se ajusta a 32×semanas. Cobertura en cierre de mañana y apertura de tarde. Sábados: todos trabajan.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -460,69 +440,17 @@ export function ScheduleGenerator({ employees, sucursales, setSchedules }: Sched
               <p className="text-sm text-muted-foreground">Sucursales</p>
             </div>
             <div className="text-center p-4 border rounded-lg">
-              <p className="text-2xl font-bold">32</p>
-              <p className="text-sm text-muted-foreground">Horas/empleado</p>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <h4 className="font-medium flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Cobertura por Sucursal
-            </h4>
-            <div className="space-y-2">
-              {stats.map((s) => (
-                <div key={s.id} className="p-3 border rounded-lg">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="font-medium">{s.name}</p>
-                      <div className="text-sm text-muted-foreground">
-                        Capacidad por turno: {s.perShiftCap} • Nunca todos al mismo tiempo
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Badge variant="outline">{s.employeeCount} empleados</Badge>
-                      <Badge variant="default">{s.perShiftCap} por turno</Badge>
-                    </div>
-                  </div>
-                  <div className="grid gap-1 md:grid-cols-2 text-xs text-muted-foreground mt-2">
-                    <div>
-                      Apertura: {s.morningStart} - {s.morningEnd} (M) • Variante: 9:00-13:00
-                    </div>
-                    <div>
-                      Cierre: {s.afternoonStart} - {s.afternoonEnd} (A) • Variante: 18:00-21:00
-                    </div>
-                  </div>
-                </div>
-              ))}
+              <p className="text-xs text-muted-foreground">Máx 2 turnos/día • Nunca todos • {forbidConsecutiveDoubles ? "Sin dobles seguidos" : "Permite dobles seguidos"}</p>
             </div>
           </div>
 
           <Alert>
             <Clock className="h-4 w-4" />
-            <AlertDescription>
-              Reglas:
-              <ul className="list-disc list-inside mt-2 space-y-1">
-                <li>Todos trabajan 6 días (L-S), mínimo 1 persona en apertura y en cierre</li>
-                <li>Nunca todos los empleados a la vez: máximo total-1 por turno</li>
-                <li>32 horas exactas por semana; ajustes finos: tarde 18-21 (-1h) y mañana 9-13 (-0.5h)</li>
-                <li>Rotación equitativa: se prioriza al que menos minutos acumula</li>
-              </ul>
-            </AlertDescription>
+            <AlertDescription>Bandas semanales 31.5–32.5 h. Cobertura dura (no se rompe 13:30 ni 17:00 según sucursal). Sábados obligatorios.</AlertDescription>
           </Alert>
 
-          <Button onClick={generateSchedules} disabled={isGenerating} className="w-full" size="lg">
-            {isGenerating ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                Generando horarios…
-              </>
-            ) : (
-              <>
-                <Shuffle className="h-4 w-4 mr-2" />
-                Generar Horarios (32h + Cobertura)
-              </>
-            )}
+          <Button onClick={generate} disabled={isGenerating} size="lg" className="w-full">
+            {isGenerating ? <>Generando…</> : <><Shuffle className="h-4 w-4 mr-2" />Generar Mes (prom. 32 h/sem)</>}
           </Button>
         </CardContent>
       </Card>

@@ -3,7 +3,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { User } from "lucide-react"
 import { EmployeeForm } from "@/components/forms/employee-form"
-import type { Employee, EmployeeFormData, Sucursal } from "@/types"
+import type { EmployeeFormData, Sucursal } from "@/types"
 
 interface EmployeeManagementSectionProps {
   sucursales: Sucursal[]

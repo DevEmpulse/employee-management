@@ -55,7 +55,6 @@ export default function HomePage() {
             <ScheduleGenerator
               employees={employees}
               sucursales={sucursales}
-              schedules={schedules}
               setSchedules={setSchedules}
             />
           </TabsContent>

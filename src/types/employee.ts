@@ -3,19 +3,10 @@ export interface Employee {
   name: string
   sucursal: string
   weeklyHours: number
-  flexibleSchedule?: {
-    morningDelay?: number
-    afternoonDelay?: number
-    earlyLeave?: number
-  }
 }
 
 export interface EmployeeFormData {
   name: string
   sucursal: string
   weeklyHours: number
-  hasFlexibleSchedule: boolean
-  morningDelay: number
-  afternoonDelay: number
-  earlyLeave: number
 }

@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Trash2 } from "lucide-react"
+import { Trash2} from "lucide-react"
 import type { Employee, Sucursal } from "@/types"
 
 interface EmployeeListProps {
@@ -39,6 +39,14 @@ export function EmployeeList({ employees, sucursales, onRemove }: EmployeeListPr
             <div className="grid gap-2">
               {sucursalEmployees.map((employee) => (
                 <div key={employee.id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div>
+                      <p className="font-medium">{employee.name}</p>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <span>32 horas semanales</span>
+                      </div>
+                    </div>
+                  </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="default">32hs</Badge>
                     <Button variant="outline" size="sm" onClick={() => onRemove(employee.id)}>

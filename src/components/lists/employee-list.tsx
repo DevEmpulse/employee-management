@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Trash2, Clock } from "lucide-react"
+import { Trash2 } from "lucide-react"
 import type { Employee, Sucursal } from "@/types"
 
 interface EmployeeListProps {
@@ -39,30 +39,6 @@ export function EmployeeList({ employees, sucursales, onRemove }: EmployeeListPr
             <div className="grid gap-2">
               {sucursalEmployees.map((employee) => (
                 <div key={employee.id} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div>
-                      <p className="font-medium">{employee.name}</p>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <span>32 horas semanales</span>
-                        {employee.flexibleSchedule && (
-                          <Badge variant="secondary" className="text-xs">
-                            <Clock className="h-3 w-3 mr-1" />
-                            Horario Flexible
-                          </Badge>
-                        )}
-                      </div>
-                      {employee.flexibleSchedule && (
-                        <div className="text-xs text-muted-foreground mt-1">
-                          {employee.flexibleSchedule.morningDelay && employee.flexibleSchedule.morningDelay > 0 &&
-                            `Mañana: +${employee.flexibleSchedule.morningDelay}min `}
-                          {employee.flexibleSchedule.afternoonDelay && employee.flexibleSchedule.afternoonDelay > 0 &&
-                            `Tarde: +${employee.flexibleSchedule.afternoonDelay}min `}
-                          {employee.flexibleSchedule.earlyLeave && employee.flexibleSchedule.earlyLeave > 0 &&
-                            `Salida: -${employee.flexibleSchedule.earlyLeave}min`}
-                        </div>
-                      )}
-                    </div>
-                  </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="default">32hs</Badge>
                     <Button variant="outline" size="sm" onClick={() => onRemove(employee.id)}>

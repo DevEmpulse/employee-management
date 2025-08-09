@@ -6,10 +6,6 @@ export function useEmployeeManagement() {
     name: "",
     sucursal: "",
     weeklyHours: 32,
-    hasFlexibleSchedule: false,
-    morningDelay: 0,
-    afternoonDelay: 0,
-    earlyLeave: 0,
   })
 
   const createEmployee = (): Employee | null => {
@@ -19,13 +15,6 @@ export function useEmployeeManagement() {
         name: newEmployee.name,
         sucursal: newEmployee.sucursal,
         weeklyHours: 32,
-        flexibleSchedule: newEmployee.hasFlexibleSchedule
-          ? {
-              morningDelay: newEmployee.morningDelay,
-              afternoonDelay: newEmployee.afternoonDelay,
-              earlyLeave: newEmployee.earlyLeave,
-            }
-          : undefined,
       }
       
       // Reset form
@@ -33,10 +22,6 @@ export function useEmployeeManagement() {
         name: "",
         sucursal: "",
         weeklyHours: 32,
-        hasFlexibleSchedule: false,
-        morningDelay: 0,
-        afternoonDelay: 0,
-        earlyLeave: 0,
       })
       
       return employee

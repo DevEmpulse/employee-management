@@ -45,62 +45,6 @@ export function EmployeeForm({ newEmployee, sucursales, onUpdate, onSubmit }: Em
         </Select>
       </div>
 
-      <div className="space-y-3">
-
-        {newEmployee.hasFlexibleSchedule && (
-          <div className="space-y-2 p-3 border rounded-lg bg-muted/50">
-            <Label className="text-sm font-medium">Ajustes de Horario (en minutos)</Label>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-1">
-                <Label htmlFor="morning-delay" className="text-xs">
-                  Retraso Mañana
-                </Label>
-                <Input
-                  id="morning-delay"
-                  type="number"
-                  min="0"
-                  max="120"
-                  value={newEmployee.morningDelay}
-                  onChange={(e) =>
-                    onUpdate("morningDelay", Number.parseInt(e.target.value) || 0)
-                  }
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="afternoon-delay" className="text-xs">
-                  Retraso Tarde
-                </Label>
-                <Input
-                  id="afternoon-delay"
-                  type="number"
-                  min="0"
-                  max="120"
-                  value={newEmployee.afternoonDelay}
-                  onChange={(e) =>
-                    onUpdate("afternoonDelay", Number.parseInt(e.target.value) || 0)
-                  }
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="early-leave" className="text-xs">
-                  Salida Temprana
-                </Label>
-                <Input
-                  id="early-leave"
-                  type="number"
-                  min="0"
-                  max="120"
-                  value={newEmployee.earlyLeave}
-                  onChange={(e) =>
-                    onUpdate("earlyLeave", Number.parseInt(e.target.value) || 0)
-                  }
-                />
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
       <Button onClick={onSubmit} className="w-full" disabled={sucursales.length === 0}>
         <Plus className="h-4 w-4 mr-2" />
         Agregar Empleado (32hs)

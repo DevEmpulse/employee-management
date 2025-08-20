@@ -1,29 +1,46 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Users, Building2, Plus, Trash2, AlertCircle } from "lucide-react"
-import type { Employee, Sucursal } from "@/app/page"
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Users, Building2, Plus, Trash2, AlertCircle } from "lucide-react";
+import type { Employee, Sucursal } from "@/app/page";
 
 interface EmployeeManagementProps {
-  sucursales: Sucursal[]
-  setSucursales: (sucursales: Sucursal[]) => void
-  employees: Employee[]
-  setEmployees: (employees: Employee[]) => void
+  sucursales: Sucursal[];
+  setSucursales: (sucursales: Sucursal[]) => void;
+  employees: Employee[];
+  setEmployees: (employees: Employee[]) => void;
 }
 
-export function EmployeeManagement({ sucursales, setSucursales, employees, setEmployees }: EmployeeManagementProps) {
+export function EmployeeManagement({
+  sucursales,
+  setSucursales,
+  employees,
+  setEmployees,
+}: EmployeeManagementProps) {
   const [newEmployee, setNewEmployee] = useState({
     name: "",
     sucursal: "",
     weeklyHours: 32,
-  })
+  });
 
   const [newSucursal, setNewSucursal] = useState({
     name: "",
@@ -32,28 +49,30 @@ export function EmployeeManagement({ sucursales, setSucursales, employees, setEm
     morningEnd: "12:00",
     afternoonStart: "13:00",
     afternoonEnd: "17:00",
-  })
+    freeDay: "",
+  });
 
   const addEmployee = () => {
-    if (!newEmployee.name || !newEmployee.sucursal) return
+    if (!newEmployee.name || !newEmployee.sucursal) return;
 
     const employee: Employee = {
       id: Date.now().toString(),
       name: newEmployee.name,
       sucursal: newEmployee.sucursal,
       weeklyHours: newEmployee.weeklyHours,
-    }
+    };
 
-    setEmployees([...employees, employee])
-    setNewEmployee({ name: "", sucursal: "", weeklyHours: 32 })
-  }
+    setEmployees([...employees, employee]);
+    setNewEmployee({ name: "", sucursal: "", weeklyHours: 32 });
+  };
 
   const removeEmployee = (id: string) => {
-    setEmployees(employees.filter((emp) => emp.id !== id))
-  }
+    setEmployees(employees.filter((emp) => emp.id !== id));
+  };
 
   const addSucursal = () => {
-    if (!newSucursal.name || !newSucursal.address) return
+    if (!newSucursal.name || !newSucursal.address || !newSucursal.freeDay)
+      return;
 
     const sucursal: Sucursal = {
       id: Date.now().toString(),
@@ -63,9 +82,10 @@ export function EmployeeManagement({ sucursales, setSucursales, employees, setEm
       morningEnd: newSucursal.morningEnd,
       afternoonStart: newSucursal.afternoonStart,
       afternoonEnd: newSucursal.afternoonEnd,
-    }
-
-    setSucursales([...sucursales, sucursal])
+      freeDay: newSucursal.freeDay,
+    };
+    console.log("Nueva sucursal creada:", sucursal);
+    setSucursales([...sucursales, sucursal]);
     setNewSucursal({
       name: "",
       address: "",
@@ -73,14 +93,15 @@ export function EmployeeManagement({ sucursales, setSucursales, employees, setEm
       morningEnd: "12:00",
       afternoonStart: "13:00",
       afternoonEnd: "17:00",
-    })
-  }
+      freeDay: "",
+    });
+  };
 
   const removeSucursal = (id: string) => {
-    setSucursales(sucursales.filter((suc) => suc.id !== id))
+    setSucursales(sucursales.filter((suc) => suc.id !== id));
     // También eliminar empleados de esa sucursal
-    setEmployees(employees.filter((emp) => emp.sucursal !== id))
-  }
+    setEmployees(employees.filter((emp) => emp.sucursal !== id));
+  };
 
   return (
     <div className="space-y-6">
@@ -91,7 +112,9 @@ export function EmployeeManagement({ sucursales, setSucursales, employees, setEm
             <Building2 className="h-5 w-5" />
             Gestión de Sucursales
           </CardTitle>
-          <CardDescription>Agrega y gestiona las sucursales de la empresa</CardDescription>
+          <CardDescription>
+            Agrega y gestiona las sucursales de la empresa
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2">
@@ -101,7 +124,9 @@ export function EmployeeManagement({ sucursales, setSucursales, employees, setEm
                 <Input
                   id="sucursal-name"
                   value={newSucursal.name}
-                  onChange={(e) => setNewSucursal({ ...newSucursal, name: e.target.value })}
+                  onChange={(e) =>
+                    setNewSucursal({ ...newSucursal, name: e.target.value })
+                  }
                   placeholder="Ej: Sucursal Centro"
                 />
               </div>
@@ -110,9 +135,33 @@ export function EmployeeManagement({ sucursales, setSucursales, employees, setEm
                 <Input
                   id="sucursal-address"
                   value={newSucursal.address}
-                  onChange={(e) => setNewSucursal({ ...newSucursal, address: e.target.value })}
+                  onChange={(e) =>
+                    setNewSucursal({ ...newSucursal, address: e.target.value })
+                  }
                   placeholder="Ej: Av. Principal 123"
                 />
+              </div>
+              <div>
+                <Label htmlFor="sucursal-free-day">Día Libre</Label>
+                <Select
+                  value={newSucursal.freeDay}
+                  onValueChange={(value) =>
+                    setNewSucursal({ ...newSucursal, freeDay: value })
+                  }
+                >
+                  <SelectTrigger id="sucursal-free-day">
+                    <SelectValue placeholder="Seleccionar día" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Lunes">Lunes</SelectItem>
+                    <SelectItem value="Martes">Martes</SelectItem>
+                    <SelectItem value="Miércoles">Miércoles</SelectItem>
+                    <SelectItem value="Jueves">Jueves</SelectItem>
+                    <SelectItem value="Viernes">Viernes</SelectItem>
+                    <SelectItem value="Sábado">Sábado</SelectItem>
+                    <SelectItem value="Domingo">Domingo</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="space-y-4">
@@ -123,7 +172,12 @@ export function EmployeeManagement({ sucursales, setSucursales, employees, setEm
                     id="morning-start"
                     type="time"
                     value={newSucursal.morningStart}
-                    onChange={(e) => setNewSucursal({ ...newSucursal, morningStart: e.target.value })}
+                    onChange={(e) =>
+                      setNewSucursal({
+                        ...newSucursal,
+                        morningStart: e.target.value,
+                      })
+                    }
                   />
                 </div>
                 <div>
@@ -132,7 +186,12 @@ export function EmployeeManagement({ sucursales, setSucursales, employees, setEm
                     id="morning-end"
                     type="time"
                     value={newSucursal.morningEnd}
-                    onChange={(e) => setNewSucursal({ ...newSucursal, morningEnd: e.target.value })}
+                    onChange={(e) =>
+                      setNewSucursal({
+                        ...newSucursal,
+                        morningEnd: e.target.value,
+                      })
+                    }
                   />
                 </div>
               </div>
@@ -143,7 +202,12 @@ export function EmployeeManagement({ sucursales, setSucursales, employees, setEm
                     id="afternoon-start"
                     type="time"
                     value={newSucursal.afternoonStart}
-                    onChange={(e) => setNewSucursal({ ...newSucursal, afternoonStart: e.target.value })}
+                    onChange={(e) =>
+                      setNewSucursal({
+                        ...newSucursal,
+                        afternoonStart: e.target.value,
+                      })
+                    }
                   />
                 </div>
                 <div>
@@ -152,7 +216,12 @@ export function EmployeeManagement({ sucursales, setSucursales, employees, setEm
                     id="afternoon-end"
                     type="time"
                     value={newSucursal.afternoonEnd}
-                    onChange={(e) => setNewSucursal({ ...newSucursal, afternoonEnd: e.target.value })}
+                    onChange={(e) =>
+                      setNewSucursal({
+                        ...newSucursal,
+                        afternoonEnd: e.target.value,
+                      })
+                    }
                   />
                 </div>
               </div>
@@ -165,13 +234,22 @@ export function EmployeeManagement({ sucursales, setSucursales, employees, setEm
 
           <div className="mt-6 space-y-2">
             {sucursales.map((sucursal) => (
-              <div key={sucursal.id} className="flex items-center justify-between p-3 border rounded-lg">
+              <div
+                key={sucursal.id}
+                className="flex items-center justify-between p-3 border rounded-lg"
+              >
                 <div>
                   <h4 className="font-medium">{sucursal.name}</h4>
-                  <p className="text-sm text-muted-foreground">{sucursal.address}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {sucursal.address}
+                  </p>
                   <div className="flex gap-2 mt-1">
-                    <Badge variant="outline">{sucursal.morningStart} - {sucursal.morningEnd}</Badge>
-                    <Badge variant="outline">{sucursal.afternoonStart} - {sucursal.afternoonEnd}</Badge>
+                    <Badge variant="outline">
+                      {sucursal.morningStart} - {sucursal.morningEnd}
+                    </Badge>
+                    <Badge variant="outline">
+                      {sucursal.afternoonStart} - {sucursal.afternoonEnd}
+                    </Badge>
                   </div>
                 </div>
                 <Button
@@ -194,7 +272,9 @@ export function EmployeeManagement({ sucursales, setSucursales, employees, setEm
             <Users className="h-5 w-5" />
             Gestión de Empleados
           </CardTitle>
-          <CardDescription>Agrega y gestiona los empleados de la empresa</CardDescription>
+          <CardDescription>
+            Agrega y gestiona los empleados de la empresa
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {sucursales.length === 0 && (
@@ -212,7 +292,9 @@ export function EmployeeManagement({ sucursales, setSucursales, employees, setEm
               <Input
                 id="employee-name"
                 value={newEmployee.name}
-                onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })}
+                onChange={(e) =>
+                  setNewEmployee({ ...newEmployee, name: e.target.value })
+                }
                 placeholder="Ej: Juan Pérez"
                 disabled={sucursales.length === 0}
               />
@@ -221,7 +303,9 @@ export function EmployeeManagement({ sucursales, setSucursales, employees, setEm
               <Label htmlFor="employee-sucursal">Sucursal</Label>
               <Select
                 value={newEmployee.sucursal}
-                onValueChange={(value) => setNewEmployee({ ...newEmployee, sucursal: value })}
+                onValueChange={(value) =>
+                  setNewEmployee({ ...newEmployee, sucursal: value })
+                }
                 disabled={sucursales.length === 0}
               >
                 <SelectTrigger>
@@ -242,23 +326,37 @@ export function EmployeeManagement({ sucursales, setSucursales, employees, setEm
                 id="weekly-hours"
                 type="number"
                 value={newEmployee.weeklyHours}
-                onChange={(e) => setNewEmployee({ ...newEmployee, weeklyHours: Number(e.target.value) })}
+                onChange={(e) =>
+                  setNewEmployee({
+                    ...newEmployee,
+                    weeklyHours: Number(e.target.value),
+                  })
+                }
                 min="1"
                 max="40"
                 disabled={sucursales.length === 0}
               />
             </div>
           </div>
-          <Button onClick={addEmployee} className="mt-4" disabled={sucursales.length === 0}>
+          <Button
+            onClick={addEmployee}
+            className="mt-4"
+            disabled={sucursales.length === 0}
+          >
             <Plus className="h-4 w-4 mr-2" />
             Agregar Empleado
           </Button>
 
           <div className="mt-6 space-y-2">
             {employees.map((employee) => {
-              const sucursal = sucursales.find((s) => s.id === employee.sucursal)
+              const sucursal = sucursales.find(
+                (s) => s.id === employee.sucursal
+              );
               return (
-                <div key={employee.id} className="flex items-center justify-between p-3 border rounded-lg">
+                <div
+                  key={employee.id}
+                  className="flex items-center justify-between p-3 border rounded-lg"
+                >
                   <div>
                     <h4 className="font-medium">{employee.name}</h4>
                     <p className="text-sm text-muted-foreground">
@@ -276,11 +374,11 @@ export function EmployeeManagement({ sucursales, setSucursales, employees, setEm
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
-              )
+              );
             })}
           </div>
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

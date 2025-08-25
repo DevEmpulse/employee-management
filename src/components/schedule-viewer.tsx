@@ -10,20 +10,28 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Download, FileText, AlertCircle } from "lucide-react";
+import {
+  Download,
+  FileText,
+  AlertCircle,
+  Pencil,
+  Save,
+  Clock,
+} from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { Schedule } from "@/app/page";
 import { SucursalScheduleDisplay } from "@/components/sucursal-schedule-display";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useState } from "react";
-import type { Sucursal } from "@/types/sucursal"; // Import Sucursal type
+import type { Sucursal } from "@/types/sucursal";
 
 interface ScheduleViewerProps {
   schedules: Schedule[];
   sucursales: Sucursal[];
+  setSchedules: (schedules: Schedule[]) => void;
 }
 
-// Nueva constante para todos los días de la semana
 const ALL_DAYS = [
   "Lunes",
   "Martes",
@@ -34,12 +42,96 @@ const ALL_DAYS = [
   "Domingo",
 ];
 
-export function ScheduleViewer({ schedules, sucursales }: ScheduleViewerProps) {
+export function ScheduleViewer({
+  schedules,
+  sucursales,
+  setSchedules,
+}: ScheduleViewerProps) {
   const [startDate, setStartDate] = useState<string>(
     new Date().toISOString().split("T")[0]
   );
+  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(
+    null
+  );
+  const [localSchedule, setLocalSchedule] = useState<Schedule | null>(null);
 
-  // Verificación de seguridad para props
+  const getSucursalData = (id: string) => {
+    return sucursales.find((s) => s.id === id);
+  };
+
+  const calculateHours = (startTime: string, endTime: string): number => {
+    const [startHour, startMinute] = startTime.split(":").map(Number);
+    const [endHour, endMinute] = endTime.split(":").map(Number);
+    const startTotalMinutes = startHour * 60 + startMinute;
+    const endTotalMinutes = endHour * 60 + endMinute;
+    return (endTotalMinutes - startTotalMinutes) / 60;
+  };
+
+  const handleEditClick = (schedule: Schedule) => {
+    setEditingScheduleId(schedule.employeeId);
+    setLocalSchedule(JSON.parse(JSON.stringify(schedule)));
+  };
+
+  // Corrección del error de tipado: Se especifica el tipo de `checked`
+  const handleCheckboxChange = (
+    day: string,
+    turn: "morning" | "afternoon",
+    checked: boolean
+  ) => {
+    if (!localSchedule) return;
+
+    const sucursalData = getSucursalData(localSchedule.sucursal);
+    if (!sucursalData) return;
+
+    const newSchedule = { ...localSchedule.schedule };
+    if (!newSchedule[day]) {
+      newSchedule[day] = { morning: false, afternoon: false, hours: 0 };
+    }
+
+    newSchedule[day][turn] = checked;
+
+    let hours = 0;
+    if (newSchedule[day].morning) {
+      hours += calculateHours(
+        sucursalData.morningStart,
+        sucursalData.morningEnd
+      );
+    }
+    if (newSchedule[day].afternoon) {
+      hours += calculateHours(
+        sucursalData.afternoonStart,
+        sucursalData.afternoonEnd
+      );
+    }
+    newSchedule[day].hours = hours;
+
+    setLocalSchedule({
+      ...localSchedule,
+      schedule: newSchedule,
+    });
+  };
+
+  const handleSaveClick = () => {
+    if (!localSchedule) return;
+
+    const totalHours = Object.values(localSchedule.schedule).reduce(
+      (sum, day) => sum + day.hours,
+      0
+    );
+    const updatedSchedule = {
+      ...localSchedule,
+      weeklyHours: totalHours,
+    };
+
+    const newSchedules = schedules.map((s) =>
+      s.employeeId === updatedSchedule.employeeId ? updatedSchedule : s
+    );
+    setSchedules(newSchedules);
+
+    setEditingScheduleId(null);
+    setLocalSchedule(null);
+  };
+
   if (!sucursales) {
     return (
       <Card>
@@ -55,22 +147,12 @@ export function ScheduleViewer({ schedules, sucursales }: ScheduleViewerProps) {
     );
   }
 
-  // Función para obtener datos de sucursal
-  const getSucursalData = (id: string) => {
-    if (!sucursales || !Array.isArray(sucursales)) {
-      return undefined;
-    }
-    return sucursales.find((s) => s.id === id);
-  };
-
-  // Ahora la función `generatePDF` también usará los días laborables correctos
   const generatePDF = () => {
     if (!sucursales || sucursales.length === 0) {
       alert("No hay sucursales disponibles para generar el PDF");
       return;
     }
 
-    // Función para obtener datos de sucursal
     const getSucursalData = (id: string) => {
       return sucursales.find((s) => s.id === id);
     };
@@ -197,12 +279,10 @@ export function ScheduleViewer({ schedules, sucursales }: ScheduleViewerProps) {
               (day) => day !== sucursalData.freeDay
             );
 
-            // Calcular las fechas de la semana basadas en la fecha de inicio
             const getWeekDates = (startDateStr: string) => {
               const startDate = new Date(startDateStr);
               const dates = [];
 
-              // Encontrar el día de inicio (Lunes o el día de inicio de semana de la sucursal)
               const dayOfWeek = startDate.getDay();
               const firstDayOfWeek = workingDays.includes("Lunes")
                 ? "Lunes"
@@ -213,7 +293,6 @@ export function ScheduleViewer({ schedules, sucursales }: ScheduleViewerProps) {
                 startDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1)
               );
 
-              // Generar las fechas para los días laborables
               for (const day of workingDays) {
                 const dayIndex = ALL_DAYS.indexOf(day);
                 const date = new Date(monday);
@@ -334,7 +413,6 @@ export function ScheduleViewer({ schedules, sucursales }: ScheduleViewerProps) {
     );
   }
 
-  // Agrupar horarios por sucursal
   const schedulesBySucursal = schedules.reduce((acc, schedule) => {
     if (!acc[schedule.sucursal]) {
       acc[schedule.sucursal] = [];
@@ -416,12 +494,18 @@ export function ScheduleViewer({ schedules, sucursales }: ScheduleViewerProps) {
 
                     <div className="space-y-4">
                       {sucursalSchedules.map((schedule) => {
+                        const currentSchedule =
+                          editingScheduleId === schedule.employeeId
+                            ? localSchedule!
+                            : schedule;
                         const totalAssignedHours = Object.values(
-                          schedule.schedule
+                          currentSchedule.schedule
                         ).reduce((sum, day) => sum + day.hours, 0);
                         const workingDaysCount = Object.keys(
-                          schedule.schedule
+                          currentSchedule.schedule
                         ).length;
+                        const isEditing =
+                          editingScheduleId === schedule.employeeId;
 
                         return (
                           <Card key={schedule.employeeId}>
@@ -452,33 +536,92 @@ export function ScheduleViewer({ schedules, sucursales }: ScheduleViewerProps) {
                                         ✓ Perfecto
                                       </Badge>
                                     )}
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={() =>
+                                      isEditing
+                                        ? handleSaveClick()
+                                        : handleEditClick(schedule)
+                                    }
+                                  >
+                                    {isEditing ? (
+                                      <Save className="h-4 w-4 text-green-600" />
+                                    ) : (
+                                      <Pencil className="h-4 w-4" />
+                                    )}
+                                  </Button>
                                 </div>
                               </div>
                             </CardHeader>
                             <CardContent>
                               <div className="grid gap-2">
-                                <div className="grid grid-cols-7 gap-2 text-sm font-medium text-center">
+                                <div className="grid grid-cols-5 gap-2 text-sm font-medium text-center">
                                   <div>Día</div>
                                   <div>Mañana</div>
                                   <div>Tarde</div>
-                                  <div>Horas</div>
-                                  <div></div>
-                                  <div></div>
+                                  <div>Total Horas</div>
                                   <div></div>
                                 </div>
                                 {workingDays.map((day) => {
-                                  const daySchedule = schedule.schedule[day];
+                                  const daySchedule =
+                                    currentSchedule.schedule[day];
+
                                   return (
                                     <div
                                       key={day}
-                                      className="grid grid-cols-7 gap-2 items-center py-2 border-t"
+                                      className="grid grid-cols-5 gap-2 items-center py-2 border-t"
                                     >
                                       <div className="font-medium">{day}</div>
-                                      <SucursalScheduleDisplay
-                                        sucursal={sucursalData}
-                                        daySchedule={daySchedule}
-                                        day={day}
-                                      />
+                                      {isEditing ? (
+                                        <>
+                                          <div className="flex justify-center items-center">
+                                            <Checkbox
+                                              id={`${schedule.employeeId}-${day}-morning`}
+                                              checked={
+                                                daySchedule?.morning ?? false
+                                              }
+                                              onCheckedChange={(checked) =>
+                                                handleCheckboxChange(
+                                                  day,
+                                                  "morning",
+                                                  !!checked
+                                                )
+                                              }
+                                            />
+                                          </div>
+                                          <div className="flex justify-center items-center">
+                                            <Checkbox
+                                              id={`${schedule.employeeId}-${day}-afternoon`}
+                                              checked={
+                                                daySchedule?.afternoon ?? false
+                                              }
+                                              onCheckedChange={(checked) =>
+                                                handleCheckboxChange(
+                                                  day,
+                                                  "afternoon",
+                                                  !!checked
+                                                )
+                                              }
+                                            />
+                                          </div>
+                                          <div className="text-center">
+                                            <Badge
+                                              variant="secondary"
+                                              className="flex items-center gap-1"
+                                            >
+                                              <Clock className="h-3 w-3" />
+                                              {daySchedule?.hours ?? 0}h
+                                            </Badge>
+                                          </div>
+                                        </>
+                                      ) : (
+                                        <SucursalScheduleDisplay
+                                          sucursal={sucursalData}
+                                          daySchedule={daySchedule}
+                                          day={day}
+                                        />
+                                      )}
                                     </div>
                                   );
                                 })}

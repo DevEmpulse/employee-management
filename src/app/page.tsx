@@ -106,7 +106,11 @@ export default function HomePage() {
           </TabsContent>
 
           <TabsContent value="schedules">
-            <ScheduleViewer schedules={schedules} sucursales={sucursales} />
+            <ScheduleViewer
+              schedules={schedules}
+              sucursales={sucursales}
+              setSchedules={setSchedules}
+            />
           </TabsContent>
 
           <TabsContent value="stats">

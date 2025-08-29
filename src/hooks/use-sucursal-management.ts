@@ -5,6 +5,7 @@ export function useSucursalManagement() {
   const [newSucursal, setNewSucursal] = useState<SucursalFormData>({
     name: "",
     address: "",
+    dayOff: "",
     morningStart: "08:00",
     morningEnd: "13:30",
     afternoonStart: "17:00",
@@ -12,11 +13,12 @@ export function useSucursalManagement() {
   })
 
   const createSucursal = (): Sucursal | null => {
-    if (newSucursal.name && newSucursal.address) {
+    if (newSucursal.name && newSucursal.address && newSucursal.dayOff) {
       const sucursal: Sucursal = {
         id: Date.now().toString(),
         name: newSucursal.name,
         address: newSucursal.address,
+        dayOff: newSucursal.dayOff,
         morningStart: newSucursal.morningStart,
         morningEnd: newSucursal.morningEnd,
         afternoonStart: newSucursal.afternoonStart,
@@ -27,6 +29,7 @@ export function useSucursalManagement() {
       setNewSucursal({
         name: "",
         address: "",
+        dayOff: "",
         morningStart: "08:00",
         morningEnd: "13:30",
         afternoonStart: "17:00",

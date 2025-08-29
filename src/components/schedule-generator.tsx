@@ -6,6 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Calendar, Shuffle, AlertCircle, Clock } from "lucide-react"
 import type { Employee, Sucursal, Schedule, DaySchedule } from "@/types"
+import { toast } from "sonner"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 
 type DayBlock = {
   morning: boolean
@@ -21,12 +24,21 @@ interface MonthlyScheduleGeneratorProps {
   employees: Employee[]
   sucursales: Sucursal[]
   setSchedules: (schedules: Schedule[]) => void
-  month?: string               // "YYYY-MM"; default: mes actual
+  selectedDate?: string        // "YYYY-MM-DD"; fecha seleccionada por el usuario
   forbidConsecutiveDoubles?: boolean
   fixedCapacityPerShift?: number | null // si null => total-1
 }
 
-const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"] as const
+const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"] as const
+const DAY_TO_DOW: Record<string, number> = {
+  "lunes": 1,
+  "martes": 2,
+  "miercoles": 3,
+  "jueves": 4,
+  "viernes": 5,
+  "sabado": 6,
+  "domingo": 0
+}
 
 // ---------- utilidades de tiempo ----------
 const t2m = (t: string) => { const [h,m] = t.split(":").map(Number); return h*60+m }
@@ -46,19 +58,21 @@ function isoWeekId(d: Date): string {
   return `${year}-W${String(week).padStart(2,"0")}`
 }
 
-function monthDates(year: number, monthIndex: number) {
+function monthDates(year: number, monthIndex: number, dayOff: string) {
   const first = new Date(year, monthIndex, 1)
   const last  = new Date(year, monthIndex+1, 0)
   const out: { iso: string; date: Date; dow: number; weekId: string; dayName: string }[] = []
+  const dayOffDow = DAY_TO_DOW[dayOff.toLowerCase()] ?? 0
+  
   for (let d = new Date(first); d <= last; d.setDate(d.getDate()+1)) {
     const dow = d.getDay() // 0 Dom .. 6 Sáb
-    if (dow >= 1 && dow <= 6) {
+    if (dow !== dayOffDow) { // Excluir el día libre de la sucursal
       out.push({
         iso: iso(d),
         date: new Date(d),
         dow,
         weekId: isoWeekId(d),
-        dayName: DAYS[dow-1],
+        dayName: DAYS[dow === 0 ? 6 : dow - 1], // Ajustar para incluir domingo
       })
     }
   }
@@ -67,12 +81,15 @@ function monthDates(year: number, monthIndex: number) {
 
 // ---------- componente ----------
 export function ScheduleGenerator({
-  employees, sucursales, setSchedules, month,
+  employees, sucursales, setSchedules, selectedDate,
   forbidConsecutiveDoubles = true,
   fixedCapacityPerShift = null,
 }: MonthlyScheduleGeneratorProps) {
 
   const [isGenerating, setIsGenerating] = useState(false)
+  const [targetMonth, setTargetMonth] = useState<string>(
+    selectedDate ? selectedDate.substring(0, 7) : new Date().toISOString().substring(0, 7)
+  )
 
   // blocks
   const makeBlock = (opts: {
@@ -104,6 +121,30 @@ export function ScheduleGenerator({
   }
 
   const generate = () => {
+    // Validar que hay empleados y sucursales
+    if (employees.length === 0) {
+      toast.error("No hay empleados registrados. Agrega empleados antes de generar horarios.")
+      return
+    }
+    
+    if (sucursales.length === 0) {
+      toast.error("No hay sucursales registradas. Agrega sucursales antes de generar horarios.")
+      return
+    }
+    
+    // Validar que todos los empleados tengan sucursal asignada
+    const employeesWithoutSucursal = employees.filter(e => !e.sucursal)
+    if (employeesWithoutSucursal.length > 0) {
+      toast.error("Todos los empleados deben tener una sucursal asignada")
+      return
+    }
+    
+    // Validar que el mes seleccionado sea válido
+    if (!targetMonth || targetMonth.length !== 7) {
+      toast.error("Selecciona un mes válido")
+      return
+    }
+    
     setIsGenerating(true)
     setTimeout(() => {
       const out: Schedule[] = []
@@ -119,8 +160,9 @@ export function ScheduleGenerator({
         if (!suc) return
 
         // mes
-        const [Y,M] = (month ?? new Date().toISOString().slice(0,7)).split("-").map(Number)
-        const dates = monthDates(Y, M-1) // L–S
+        const [Y, M] = targetMonth.split("-").map(Number)
+        const targetDate = new Date(Y, M - 1, 1)
+        const dates = monthDates(Y, M-1, suc.dayOff) // Usar el día libre específico de la sucursal
         const weekIds = Array.from(new Set(dates.map(d=>d.weekId)))
 
         // duraciones
@@ -159,45 +201,46 @@ export function ScheduleGenerator({
         const needWeek  = (id: string, w: string) => TARGET_WEEK_MIN - E[id].weekMin[w]
         const needMonth = (id: string) => TARGET_MONTH_MIN  - E[id].totalMonthMin
 
-        // --- PRE-PASO: SÁBADOS OBLIGATORIOS (todos trabajan sábado con 1 turno) ---
+        // --- PRE-PASO: SÁBADOS OBLIGATORIOS (solo si el sábado no es día libre) ---
         const saturdays = dates.filter(d => d.dow === 6) // 6 = Sábado
-
-        const addMorning = (empId: string, dIso: string) => {
-          const ex = E[empId].byDate[dIso]
-          if (!ex) {
-            E[empId].byDate[dIso] = makeBlock({ kind: "M", suc, hM, hA, hAL, hMS })
-          } else if (!ex.morning) {
-            ex.morning = true; ex.morningStart = suc.morningStart; ex.morningEnd = suc.morningEnd; recalcBlock(ex)
+        if (saturdays.length > 0) {
+          const addMorning = (empId: string, dIso: string) => {
+            const ex = E[empId].byDate[dIso]
+            if (!ex) {
+              E[empId].byDate[dIso] = makeBlock({ kind: "M", suc, hM, hA, hAL, hMS })
+            } else if (!ex.morning) {
+              ex.morning = true; ex.morningStart = suc.morningStart; ex.morningEnd = suc.morningEnd; recalcBlock(ex)
+            }
+            E[empId].totalMonthMin += hM * 60
+            const w = dates.find(x => x.iso === dIso)!.weekId
+            E[empId].weekMin[w] += hM * 60
           }
-          E[empId].totalMonthMin += hM * 60
-          const w = dates.find(x => x.iso === dIso)!.weekId
-          E[empId].weekMin[w] += hM * 60
-        }
 
-        const addAfternoon = (empId: string, dIso: string) => {
-          const ex = E[empId].byDate[dIso]
-          if (!ex) {
-            E[empId].byDate[dIso] = makeBlock({ kind: "A", suc, hM, hA, hAL, hMS })
-          } else if (!ex.afternoon) {
-            ex.afternoon = true; ex.afternoonStart = suc.afternoonStart; ex.afternoonEnd = suc.afternoonEnd; recalcBlock(ex)
+          const addAfternoon = (empId: string, dIso: string) => {
+            const ex = E[empId].byDate[dIso]
+            if (!ex) {
+              E[empId].byDate[dIso] = makeBlock({ kind: "A", suc, hM, hA, hAL, hMS })
+            } else if (!ex.afternoon) {
+              ex.afternoon = true; ex.afternoonStart = suc.afternoonStart; ex.afternoonEnd = suc.afternoonEnd; recalcBlock(ex)
+            }
+            E[empId].totalMonthMin += hA * 60
+            const w = dates.find(x => x.iso === dIso)!.weekId
+            E[empId].weekMin[w] += hA * 60
           }
-          E[empId].totalMonthMin += hA * 60
-          const w = dates.find(x => x.iso === dIso)!.weekId
-          E[empId].weekMin[w] += hA * 60
-        }
 
-        saturdays.forEach(d => {
-          const shuffled = [...emps].sort(() => Math.random() - 0.5)
-          const capSat = Math.max(1, Math.ceil(emps.length / 2)) // sin "todos" a la vez
-          const morningIds   = shuffled.slice(0, capSat).map(e => e.id)
-          const afternoonIds = shuffled.slice(capSat, Math.min(emps.length, capSat * 2)).map(e => e.id)
-          morningIds.forEach(id => addMorning(id, d.iso))
-          afternoonIds.forEach(id => addAfternoon(id, d.iso))
-        })
+          saturdays.forEach(d => {
+            const shuffled = [...emps].sort(() => Math.random() - 0.5)
+            const capSat = Math.max(1, Math.ceil(emps.length / 2)) // sin "todos" a la vez
+            const morningIds   = shuffled.slice(0, capSat).map(e => e.id)
+            const afternoonIds = shuffled.slice(capSat, Math.min(emps.length, capSat * 2)).map(e => e.id)
+            morningIds.forEach(id => addMorning(id, d.iso))
+            afternoonIds.forEach(id => addAfternoon(id, d.iso))
+          })
+        }
 
         // -------- Asignación base (fecha/slot) --------
         dates.forEach(d => {
-          if (d.dow === 6) return // sábado ya resuelto
+          if (d.dow === 6 && saturdays.some(sat => sat.iso === d.iso)) return // sábado ya resuelto
 
           const cap = perShiftCap(emps.length)
           const dayCount: Record<string, number> = Object.fromEntries(emps.map(x=>[x.id,0]))
@@ -402,6 +445,7 @@ export function ScheduleGenerator({
 
       setSchedules(out)
       setIsGenerating(false)
+      toast.success(`Horarios generados correctamente para ${out.length} empleados`)
     }, 300)
   }
 
@@ -418,40 +462,61 @@ export function ScheduleGenerator({
   // Nota: estadísticas por sucursal no usadas en esta versión del UI
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calendar className="h-5 w-5" />
-            Generador Mensual (promedio 32 h/semana)
+    <div className="space-y-4 md:space-y-6">
+      <Card className="shadow-sm">
+        <CardHeader className="pb-3 md:pb-6">
+          <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+            <Calendar className="h-4 w-4 md:h-5 md:w-5" />
+            Generador
           </CardTitle>
-          <CardDescription>
-            Mes completo (L–S). Cada semana queda en 31.5–32.5 h; el total mensual por empleado se ajusta a 32×semanas. Cobertura en cierre de mañana y apertura de tarde. Sábados: todos trabajan.
+          <CardDescription className="text-xs md:text-sm">
+            Mes completo respetando el día libre de cada sucursal. Cada semana queda en 31.5–32.5 h; el total mensual por empleado se ajusta a 32×semanas. Cobertura en cierre de mañana y apertura de tarde.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="text-center p-4 border rounded-lg">
-              <p className="text-2xl font-bold">{employees.length}</p>
-              <p className="text-sm text-muted-foreground">Empleados</p>
+        <CardContent className="space-y-4 md:space-y-6">
+          <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="text-center p-3 md:p-4 border rounded-lg bg-blue-50">
+              <p className="text-lg md:text-2xl font-bold text-blue-600">{employees.length}</p>
+              <p className="text-xs md:text-sm text-blue-700/70">Empleados</p>
             </div>
-            <div className="text-center p-4 border rounded-lg">
-              <p className="text-2xl font-bold">{sucursales.length}</p>
-              <p className="text-sm text-muted-foreground">Sucursales</p>
+            <div className="text-center p-3 md:p-4 border rounded-lg bg-green-50">
+              <p className="text-lg md:text-2xl font-bold text-green-600">{sucursales.length}</p>
+              <p className="text-xs md:text-sm text-green-700/70">Sucursales</p>
             </div>
-            <div className="text-center p-4 border rounded-lg">
-              <p className="text-xs text-muted-foreground">Máx 2 turnos/día • Nunca todos • {forbidConsecutiveDoubles ? "Sin dobles seguidos" : "Permite dobles seguidos"}</p>
+            <div className="text-center p-3 md:p-4 border rounded-lg bg-gray-50 col-span-1 sm:col-span-2 lg:col-span-1">
+              <p className="text-xs text-gray-600">Máx 2 turnos/día • Nunca todos • {forbidConsecutiveDoubles ? "Sin dobles seguidos" : "Permite dobles seguidos"}</p>
             </div>
           </div>
 
-          <Alert>
-            <Clock className="h-4 w-4" />
-            <AlertDescription>Bandas semanales 31.5–32.5 h. Cobertura dura (no se rompe 13:30 ni 17:00 según sucursal). Sábados obligatorios.</AlertDescription>
-          </Alert>
+          <div className="flex flex-col sm:flex-row gap-3 md:gap-4 items-start sm:items-center">
+            <div className="flex flex-col gap-1 md:gap-2 w-full sm:w-auto">
+              <Label htmlFor="target-month" className="text-xs md:text-sm font-medium">Mes para generar horarios</Label>
+              <Input 
+                id="target-month" 
+                type="month" 
+                value={targetMonth} 
+                onChange={(e) => setTargetMonth(e.target.value)} 
+                className="w-full sm:w-44 text-sm" 
+              />
+            </div>
+          </div>
 
-          <Button onClick={generate} disabled={isGenerating} size="lg" className="w-full">
-            {isGenerating ? <>Generando…</> : <><Shuffle className="h-4 w-4 mr-2" />Generar Mes (prom. 32 h/sem)</>}
-          </Button>
+                     <Button 
+             onClick={generate} 
+             disabled={isGenerating} 
+             size="lg" 
+             className="w-full cursor-pointer bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-medium shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+           >
+             {isGenerating ? (
+               <>Generando…</>
+             ) : (
+               <>
+                 <Shuffle className="h-4 w-4 mr-2" />
+                 <span className="hidden sm:inline">Generar (prom. 32 h/sem)</span>
+                 <span className="sm:hidden">Generar Horarios</span>
+               </>
+             )}
+           </Button>
         </CardContent>
       </Card>
     </div>

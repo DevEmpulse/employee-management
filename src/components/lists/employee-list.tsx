@@ -49,7 +49,12 @@ export function EmployeeList({ employees, sucursales, onRemove }: EmployeeListPr
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="default">32hs</Badge>
-                    <Button variant="outline" size="sm" onClick={() => onRemove(employee.id)}>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => onRemove(employee.id)} 
+                      className="cursor-pointer bg-red-50 border-red-200 text-red-700 hover:bg-red-100 hover:border-red-300 hover:text-red-800 transition-all duration-200"
+                    >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>

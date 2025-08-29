@@ -1,5 +1,6 @@
 "use client"
 
+import { toast } from "sonner"
 import { SucursalManagementSection } from "@/components/sections/sucursal-management-section"
 import { EmployeeManagementSection } from "@/components/sections/employee-management-section"
 import { EmployeeListSection } from "@/components/sections/employee-list-section"
@@ -31,24 +32,30 @@ export function EmployeeManagement({ sucursales, setSucursales, employees, setEm
     const sucursal = createSucursal()
     if (sucursal) {
       setSucursales([...sucursales, sucursal])
+      toast.success("Sucursal creada correctamente")
     }
   }
 
   const handleRemoveSucursal = (id: string) => {
+    const sucursalToRemove = sucursales.find(s => s.id === id)
     setSucursales(sucursales.filter((s) => s.id !== id))
     // También remover empleados de esa sucursal
     setEmployees(employees.filter((e) => e.sucursal !== id))
+    toast.success(`Sucursal "${sucursalToRemove?.name}" eliminada correctamente`)
   }
 
   const handleAddEmployee = () => {
     const employee = createEmployee()
     if (employee) {
       setEmployees([...employees, employee])
+      toast.success("Empleado creado correctamente")
     }
   }
 
   const handleRemoveEmployee = (id: string) => {
+    const employeeToRemove = employees.find(e => e.id === id)
     setEmployees(employees.filter((e) => e.id !== id))
+    toast.success(`Empleado "${employeeToRemove?.name}" eliminado correctamente`)
   }
 
   return (
